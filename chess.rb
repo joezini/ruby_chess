@@ -1,3 +1,15 @@
+module Locate
+	def locate_self(board)
+		(0..7).each do |i|
+			(0..7).each do |j|
+				if board.placements[i][j] == self
+					return [i, j]
+				end
+			end
+		end
+	end
+end
+
 class Board
 	attr_accessor :placements
 
@@ -19,14 +31,10 @@ class Board
 		output = " "
 		8.times { output << " __" }
 		output << "\n"
-		7.downto(0) do |i|
-			output << (i+1).to_s + "|"
-			0.upto(7) do |j|
-				symbol = "_"
-				if @placements[i][j] != nil
-					symbol = @placements[i][j].symbol
-				end
-				output << symbol + "_|"
+		7.downto(0) do |j|
+			output << (j+1).to_s + "|"
+			0.upto(7) do |i|
+				output << @placements[i][j].symbol + "_|"
 			end
 			output << "\n"
 		end
@@ -36,37 +44,51 @@ class Board
 	end
 
 	def set_starting_positions
-		@placements[0][0] = Rook.new("w")
-		@placements[0][1] = Knight.new("w")
-		@placements[0][2] = Bishop.new("w")
-		@placements[0][3] = Queen.new("w")
-		@placements[0][4] = King.new("w")
-		@placements[0][5] = Bishop.new("w")
-		@placements[0][6] = Knight.new("w")
-		@placements[0][7] = Rook.new("w")
-		(0..7).each do |j| 
-			@placements[1][j] = Pawn.new("w")
+		def set_major_row(team)
+			if team == "w"
+				row = 0
+			elsif team == "b"
+				row = 7
+			end
+			@placements[0][row] = Rook.new(team)
+			@placements[1][row] = Knight.new(team)
+			@placements[2][row] = Bishop.new(team)
+			@placements[3][row] = Queen.new(team)
+			@placements[4][row] = King.new(team)
+			@placements[5][row] = Bishop.new(team)
+			@placements[6][row] = Knight.new(team)
+			@placements[7][row] = Rook.new(team)
 		end
-		(2..5).each do |i|
-			(0..7).each do |j|
-				@placements[i][j] = nil
+
+		def set_pawn_row(team)
+			if team == "w"
+				row = 1
+			elsif team == "b"
+				row = 6
+			end
+			(0..7).each do |i| 
+				@placements[i][row] = Pawn.new(team)
 			end
 		end
-		(0..7).each do |j| 
-			@placements[6][j] = Pawn.new("b")
+
+		def set_blank_rows
+			(2..5).each do |j|
+				(0..7).each do |i|
+					@placements[i][j] = Blank.new
+				end
+			end
 		end
-		@placements[7][0] = Rook.new("b")
-		@placements[7][1] = Knight.new("b")
-		@placements[7][2] = Bishop.new("b")
-		@placements[7][3] = Queen.new("b")
-		@placements[7][4] = King.new("b")
-		@placements[7][5] = Bishop.new("b")
-		@placements[7][6] = Knight.new("b")
-		@placements[7][7] = Rook.new("b")
+
+		set_major_row("w")
+		set_pawn_row("w")
+		set_blank_rows
+		set_pawn_row("b")
+		set_major_row("b")
 	end
 end
 
 class King
+	include Locate
 	attr_accessor :team, :symbol
 
 	def initialize(team)
@@ -77,9 +99,14 @@ class King
 			@symbol = "k"
 		end
 	end
+
+	def is_blank
+		false
+	end
 end
 
 class Queen
+	include Locate
 	attr_accessor :team, :symbol
 
 	def initialize(team)
@@ -90,9 +117,14 @@ class Queen
 			@symbol = "q"
 		end
 	end
+
+	def is_blank
+		false
+	end
 end
 
 class Bishop
+	include Locate
 	attr_accessor :team, :symbol
 
 	def initialize(team)
@@ -103,9 +135,14 @@ class Bishop
 			@symbol = "b"
 		end
 	end
+
+	def is_blank
+		false
+	end
 end
 
 class Knight
+	include Locate
 	attr_accessor :team, :symbol
 
 	def initialize(team)
@@ -116,9 +153,14 @@ class Knight
 			@symbol = "n"
 		end
 	end
+
+	def is_blank
+		false
+	end
 end
 
 class Rook
+	include Locate
 	attr_accessor :team, :symbol
 
 	def initialize(team)
@@ -129,9 +171,61 @@ class Rook
 			@symbol = "r"
 		end
 	end
+
+	def is_blank
+		false
+	end
+
+	def valid_moves(board)
+		i,j = locate_self(board)
+		moves = []
+
+		def on_board(i, j)
+			if i >= 0 && i <= 7 && j >= 0 && j <= 7
+				true
+			else
+				false
+			end
+		end
+
+		def next_square(x, y, dir)
+			case dir
+			when "up" [x, y + 1]
+			when "down" [x, y - 1]
+			when "left" [x - 1, y]
+			when "right" [x + 1, y]
+			end
+		end
+
+		def check_line_from(x, y, dir, board)
+			blocked = false
+			moves = []
+			until blocked || !on_board(x, y) do
+				puts "Current coords #{x}, #{y}"
+				next_x, next_y = next_square(x, y, dir)
+				puts "next coords #{next_x}, #{next_y}"
+				if on_board(next_x, next_y) && board.placements[next_x][next_y].is_blank
+					moves << [next_x, next_y]
+					x,y = next_x, next_y
+				elsif on_board(next_x,next_y) && !board.placements[next_x][next_y].is_blank && board.placements[next_x][next_y].team != @team
+					moves << [next_x, next_y]
+					blocked = true
+				end
+			end
+			moves
+		end
+
+		moves += check_line_from(i, j, "up", board)
+		moves += check_line_from(i, j, "down", board)
+		moves += check_line_from(i, j, "left", board)
+		moves += check_line_from(i, j, "right", board)
+
+		moves
+	end
 end
 
 class Pawn
+	include Locate
 	attr_accessor :team, :symbol, :has_moved
 
 	def initialize(team)
@@ -144,19 +238,59 @@ class Pawn
 		@has_moved = false
 	end
 
-	def valid_moves(pos, board)
-		i = pos[0]
-		j = pos[1]
+	def is_blank
+		false
+	end
+
+	def valid_moves(board)
+		i,j = locate_self(board)
 		moves = []
-		if @team == "w"
-			# move up the board
-			moves << [i, j + 1] if j < 7
-			moves << [i, j + 2] if !@has_moved #this should only be poss if the prev sq wasn't occupied...
-		else
-			# move down the board
-			moves << [i, j - 1] if j > 0
-			moves << [i, j - 2] if !@has_moved
+		blocked = false
+
+		def next_row(j, no_rows)
+			if @team == "w"
+				j + no_rows
+			else
+				j - no_rows
+			end
 		end
+
+		def on_board(row)
+			if row >= 0 && row <= 7
+				true
+			else
+				false
+			end
+		end
+
+		if on_board(next_row(j,1)) && board.placements[i][next_row(j,1)].is_blank
+			moves << [i, next_row(j,1)]
+		else
+			blocked = true
+		end
+		if !@has_moved && board.placements[i][next_row(j,2)].is_blank && !blocked
+			moves << [i, next_row(j,2)]
+		end
+		if on_board(next_row(j,1)) && !board.placements[i - 1][next_row(j,1)].is_blank && board.placements[i - 1][next_row(j,1)].team != @team
+			moves << [i - 1, next_row(j,1)]
+		end
+		if on_board(next_row(j,1)) && !board.placements[i + 1][next_row(j,1)].is_blank && board.placements[i + 1][next_row(j,1)].team != @team
+			moves << [i + 1, next_row(j,1)]
+		end
+
 		moves
 	end
 end
+
+class Blank
+	attr_accessor :symbol
+
+	def initialize
+		@symbol = "_"
+	end
+
+	def is_blank
+		true
+	end
+end
+

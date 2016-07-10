@@ -24,11 +24,6 @@ start_board = %Q(  __ __ __ __ __ __ __ __
 
 describe Board do
 	describe '#as_string' do
-		it 'outputs an empty board string' do
-			board = Board.new
-			expect(board.as_string).to eq(empty_board)
-		end
-
 		it 'populates the starting position' do
 			board = Board.new
 			board.set_starting_positions
@@ -38,6 +33,15 @@ describe Board do
 end
 
 describe Pawn do
+	describe '#locate_self' do
+		it 'can find its location on the board' do
+			@board = Board.new
+			@board.set_starting_positions
+			white_pawn = @board.placements[2][1]
+			expect(white_pawn.locate_self(@board)).to eq([2,1])
+		end
+	end
+
 	describe '#valid_moves' do
 		before :each do
 			@board = Board.new
@@ -45,25 +49,59 @@ describe Pawn do
 		end
 
 		it 'can move 1 or 2 square at the start' do
-			white_pawn = @board.placements[1][2]
-			expect(white_pawn.valid_moves([1,2], @board)).to eq([[2,2],[3,2]])
-			black_pawn = @board.placements[6][3]
-			expect(black_pawn.valid_moves([6,3], @board)).to eq([[5,3],[4,3]])
-			# agh the coordinates are a mess! Get this working in a nice Cartesian way...
+			white_pawn = @board.placements[2][1]
+			expect(white_pawn.valid_moves(@board)).to eq([[2,2],[2,3]])
+			black_pawn = @board.placements[3][6]
+			expect(black_pawn.valid_moves(@board)).to eq([[3,5],[3,4]])
 		end
 
-		xit 'can only move 1 square after it has started moving' do
-			# need to move the pawns
-			white_pawn = # select one of the pawns already on the board
+		it 'can only move 1 square after it has started moving' do
+			white_pawn = @board.placements[3][1]
+			@board.placements[3][2] = white_pawn
 			white_pawn.has_moved = true
-			expect(white_pawn.valid_moves([3,2])).to eq([[3,3]])
-			black_pawn = Pawn.new("b")
+			@board.placements[3][1] = Blank.new
+			expect(white_pawn.valid_moves(@board)).to eq([[3,3]])
+			black_pawn = @board.placements[4][6]
+			@board.placements[4][5] = black_pawn
+			@board.placements[4][6] = Blank.new
 			black_pawn.has_moved = true
-			expect(black_pawn.valid_moves([4,5])).to eq([[4,4]])
+			expect(black_pawn.valid_moves(@board)).to eq([[4,4]])
 		end
 
-		xit 'can move diagonally if there is an enemy piece to capture' do
-			white_pawn = Pawn.new("w")
+		it 'can move diagonally if there is an enemy piece to capture' do
+			white_pawn = @board.placements[3][1]
+			@board.placements[3][2] = white_pawn
+			white_pawn.has_moved = true
+			@board.placements[3][1] = Blank.new
+			black_pawn = @board.placements[4][6]
+			@board.placements[4][3] = black_pawn
+			@board.placements[4][6] = Blank.new
+			black_pawn.has_moved = true
+			expect(white_pawn.valid_moves(@board)).to eq([[3,3],[4,3]])
+		end
+	end
+end
+
+describe Rook do
+	describe '#valid_moves' do
+		before :each do
+			@board = Board.new
+			@board.set_starting_positions
+		end
+
+		it 'cannot move at the start of the game' do
+			white_rook = @board.placements[0][0]
+			expect(white_rook.valid_moves(@board)).to eq([])
+		end
+
+		it 'can move vertically and horizontally and capture enemy pieces' do
+			white_rook = @board.placements[0][0]
+			@board.placements[0][3] = white_rook
+			@board.placements[0][1] = Blank.new
+			white_pawn = @board.placements[4][1]
+			@board.placements[4][3] = white_pawn
+			@board.placements[4][1] = Blank.new
+			expect(white_rook.valid_moves(@board)).to eq([[0,4],[0,5],[0,6],[0,2],[0,1],[0,0],[1,3],[2,3],[3,3]])
 		end
 	end
 end
