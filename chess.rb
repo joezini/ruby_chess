@@ -1,3 +1,7 @@
+# TODO
+# Implement en passent, castling
+# Replace team strings with symbols
+
 module Locate
 	def locate_self(board)
 		(0..7).each do |i|
@@ -7,6 +11,53 @@ module Locate
 				end
 			end
 		end
+	end
+
+	def on_board(i, j)
+		if i >= 0 && i <= 7 && j >= 0 && j <= 7
+			true
+		else
+			false
+		end
+	end
+
+	def next_square(x, y, dir)
+		case dir
+		when "ne"
+		  [x + 1, y + 1]
+		when "se"
+		  [x + 1, y - 1]
+		when "sw"
+		  [x - 1, y - 1]
+		when "nw"
+		  [x - 1, y + 1]
+	  	when "up"
+		  [x, y + 1]
+		when "down"
+		  [x, y - 1]
+		when "left"
+		  [x - 1, y]
+		when "right"
+		  [x + 1, y]
+		end
+	end
+
+	def check_line_from(x, y, dir, board)
+		blocked = false
+		moves = []
+		until blocked || !on_board(x, y) do
+			next_x, next_y = next_square(x, y, dir)
+			if on_board(next_x, next_y) && board.placements[next_x][next_y].is_blank
+				moves << [next_x, next_y]
+			elsif on_board(next_x,next_y) && !board.placements[next_x][next_y].is_blank
+				if board.placements[next_x][next_y].team != @team
+					moves << [next_x, next_y]
+				end
+				blocked = true
+			end
+			x,y = next_x, next_y
+		end
+		moves
 	end
 end
 
@@ -85,6 +136,18 @@ class Board
 		set_pawn_row("b")
 		set_major_row("b")
 	end
+
+	def attacking_team(team)
+		attacked = []
+		@placements.each do |col|
+			col.each do |square|
+				if !square.is_blank && square.team != team
+					attacked << square.attacking(self)
+				end
+			end
+		end
+		attacked.uniq
+	end
 end
 
 class King
@@ -102,6 +165,40 @@ class King
 
 	def is_blank
 		false
+	end
+
+	def valid_moves(board)
+		i,j = locate_self(board)
+		moves = []
+		attacked = board.attacking_team(@team)
+
+		def check_direction(x, y, dir, board, attacked)
+			move = []
+			next_x, next_y = next_square(x, y, dir)
+
+			if on_board(next_x, next_y) && !attacked.include?([next_x,next_y])
+				if board.placements[next_x][next_y].is_blank || board.placements[next_x][next_y].team != @team
+					move << [next_x, next_y]
+				end
+			end
+	
+			move
+		end
+
+		moves += check_direction(i, j, "up", board, attacked)
+		moves += check_direction(i, j, "ne", board, attacked)
+		moves += check_direction(i, j, "right", board, attacked)
+		moves += check_direction(i, j, "se", board, attacked)
+		moves += check_direction(i, j, "down", board, attacked)
+		moves += check_direction(i, j, "sw", board, attacked)
+		moves += check_direction(i, j, "left", board, attacked)
+		moves += check_direction(i, j, "nw", board, attacked)
+
+		moves
+	end
+
+	def attacking(board)
+		valid_moves(board)
 	end
 end
 
@@ -121,6 +218,26 @@ class Queen
 	def is_blank
 		false
 	end
+
+	def valid_moves(board)
+		i,j = locate_self(board)
+		moves = []
+
+		moves += check_line_from(i, j, "up", board)
+		moves += check_line_from(i, j, "ne", board)
+		moves += check_line_from(i, j, "right", board)
+		moves += check_line_from(i, j, "se", board)
+		moves += check_line_from(i, j, "down", board)
+		moves += check_line_from(i, j, "sw", board)
+		moves += check_line_from(i, j, "left", board)
+		moves += check_line_from(i, j, "nw", board)
+
+		moves
+	end
+
+	def attacking(board)
+		valid_moves(board)
+	end
 end
 
 class Bishop
@@ -139,6 +256,22 @@ class Bishop
 	def is_blank
 		false
 	end
+
+	def valid_moves(board)
+		i,j = locate_self(board)
+		moves = []
+
+		moves += check_line_from(i, j, "ne", board)
+		moves += check_line_from(i, j, "se", board)
+		moves += check_line_from(i, j, "sw", board)
+		moves += check_line_from(i, j, "nw", board)
+
+		moves
+	end
+
+	def attacking(board)
+		valid_moves(board)
+	end
 end
 
 class Knight
@@ -156,6 +289,26 @@ class Knight
 
 	def is_blank
 		false
+	end
+
+	def valid_moves(board)
+		i,j = locate_self(board)
+		moves = []
+		possible_moves = [[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]]
+		possible_moves.each do |x, y|
+			if on_board(i+x, j+y)
+				if board.placements[i+x][j+y].is_blank
+					moves << [i+x, j+y]
+				elsif !board.placements[i+x][j+y].is_blank && board.placements[i+x][j+y].team != @team
+					moves << [i+x, j+y]
+				end
+			end
+		end
+		moves
+	end
+
+	def attacking(board)
+		valid_moves(board)
 	end
 end
 
@@ -180,47 +333,16 @@ class Rook
 		i,j = locate_self(board)
 		moves = []
 
-		def on_board(i, j)
-			if i >= 0 && i <= 7 && j >= 0 && j <= 7
-				true
-			else
-				false
-			end
-		end
-
-		def next_square(x, y, dir)
-			case dir
-			when "up" [x, y + 1]
-			when "down" [x, y - 1]
-			when "left" [x - 1, y]
-			when "right" [x + 1, y]
-			end
-		end
-
-		def check_line_from(x, y, dir, board)
-			blocked = false
-			moves = []
-			until blocked || !on_board(x, y) do
-				puts "Current coords #{x}, #{y}"
-				next_x, next_y = next_square(x, y, dir)
-				puts "next coords #{next_x}, #{next_y}"
-				if on_board(next_x, next_y) && board.placements[next_x][next_y].is_blank
-					moves << [next_x, next_y]
-					x,y = next_x, next_y
-				elsif on_board(next_x,next_y) && !board.placements[next_x][next_y].is_blank && board.placements[next_x][next_y].team != @team
-					moves << [next_x, next_y]
-					blocked = true
-				end
-			end
-			moves
-		end
-
 		moves += check_line_from(i, j, "up", board)
 		moves += check_line_from(i, j, "down", board)
 		moves += check_line_from(i, j, "left", board)
 		moves += check_line_from(i, j, "right", board)
 
 		moves
+	end
+
+	def attacking(board)
+		valid_moves(board)
 	end
 end
 
@@ -279,6 +401,17 @@ class Pawn
 		end
 
 		moves
+	end
+
+	def attacking(board) 
+		i,j = locate_self(board)
+		all_moves = valid_moves(board)
+		attacking = []
+		all_moves.each do |x,y|
+			attacking << [x,y] if x != i
+		end
+
+		attacking
 	end
 end
 
