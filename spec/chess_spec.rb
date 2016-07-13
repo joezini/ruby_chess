@@ -35,7 +35,7 @@ describe Board do
 		it 'finds all squares under attack by enemy team' do
 			@board = Board.new
 			@board.set_starting_positions
-			expect(@board.attacking_team("w")).to eq([[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5]])
+			expect(@board.attacking_team(:white)).to eq([[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5]])
 		end
 	end
 end
