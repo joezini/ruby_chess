@@ -542,3 +542,67 @@ class Blank
 	end
 end
 
+class Game
+	def initialize
+		@board = Board.new
+		@board.set_starting_positions
+	end
+
+	def play
+		@letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+		@numbers = ['1', '2', '3', '4', '5', '6', '7', '8']
+
+		def validate_square(entry)
+			if entry.length == 2
+				if @letters.include?(entry[0]) && @numbers.include?(entry[1])
+					true
+				else
+					false
+				end
+			else
+				false
+			end
+		end
+
+		def validate_piece(entry, player)
+			x = @letters.find_index(entry[0])
+			y = @numbers.find_index(entry[1])
+			if !@board.placements[x][y].is_blank
+				if @board.placements[x][y].team == player
+					[x, y]
+				else
+					false
+				end
+			else
+				false
+			end
+		end
+
+		def get_valid_piece(player)
+			valid = false
+			piece = ""
+			until valid do
+				puts "It's #{player}'s turn, please enter a piece to move (e.g. d4):"
+				piece = gets.chomp
+				if validate_square(piece) && validate_piece(piece, player)
+					valid = true
+				end
+			end
+			validate_piece(piece, player)
+		end
+
+
+		puts "Welcome to my chess game!"
+		puts @board.as_string
+		game_over = false
+		player = :white
+		until game_over do
+			x, y = get_valid_piece(player)
+			puts "#{x}, #{y}"
+			game_over = true
+		end
+	end
+end
+
+game = Game.new
+game.play
