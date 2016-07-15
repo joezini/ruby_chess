@@ -1,16 +1,5 @@
 require_relative '../chess'
 
-empty_board = %Q(  __ __ __ __ __ __ __ __
-8|__|__|__|__|__|__|__|__|
-7|__|__|__|__|__|__|__|__|
-6|__|__|__|__|__|__|__|__|
-5|__|__|__|__|__|__|__|__|
-4|__|__|__|__|__|__|__|__|
-3|__|__|__|__|__|__|__|__|
-2|__|__|__|__|__|__|__|__|
-1|__|__|__|__|__|__|__|__|
-   a  b  c  d  e  f  g  h)
-
 start_board = %Q(  __ __ __ __ __ __ __ __
 8|r_|n_|b_|q_|k_|b_|n_|r_|
 7|p_|p_|p_|p_|p_|p_|p_|p_|
@@ -33,9 +22,30 @@ describe Board do
 
 	describe '#attacking_team' do
 		it 'finds all squares under attack by enemy team' do
-			@board = Board.new
-			@board.set_starting_positions
-			expect(@board.attacking_team(:white)).to eq([[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5]])
+			board = Board.new
+			board.set_starting_positions
+			expect(board.attacking_team(:white)).to eq([[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5]])
+		end
+	end
+
+	describe '#in_check' do
+		it 'reports that a team is in check' do
+			board = Board.new
+			board.set_starting_positions
+			board.placements[5][0] = Blank.new
+			board.placements[4][1] = Rook.new(:black)
+			expect(board.in_check(:white)).to be true
+		end
+	end
+
+	describe '#in_checkmate' do
+		it 'reports that a team is in checkmate' do
+			board = Board.new
+			board.set_starting_positions
+			board.placements[5][0] = Blank.new
+			board.placements[4][1] = Queen.new(:black)
+			board.placements[5][2] = Pawn.new(:black)
+			expect(board.in_checkmate(:white)).to be true
 		end
 	end
 end
@@ -126,6 +136,26 @@ describe Rook do
 			expect(white_rook.valid_moves(@board)).to eq([[0,4],[0,5],[0,6],[0,2],[0,1],[0,0],[1,3],[2,3],[3,3]])
 		end
 	end
+
+	describe '#move' do
+		before :each do
+			@board = Board.new
+			@board.set_starting_positions
+		end
+
+		it 'cannot move from its starting position' do
+			white_rook = @board.placements[0][0]
+			expect(white_rook.move(0, 1, @board)).to be false
+			expect(white_rook.locate_self(@board)).to eq([0, 0])
+		end
+
+		it 'can move vertically and capture an enemy pawn' do
+			white_rook = @board.placements[0][0]
+			@board.placements[0][1] = Blank.new
+			expect(white_rook.move(0, 6, @board)).to be true
+			expect(white_rook.locate_self(@board)).to eq([0, 6])
+		end
+	end
 end
 
 describe Knight do
@@ -144,6 +174,19 @@ describe Knight do
 			@board.placements[2][1] = Blank.new
 			expect(white_knight.valid_moves(@board)).to eq([[2,6],[3,5],[3,3],[0,2],[0,6]])
 		end
+	end
+
+	describe '#move' do
+		before :each do
+			@board = Board.new
+			@board.set_starting_positions
+		end
+
+		it 'can move from its start position' do
+			white_knight = @board.placements[1][0]
+			expect(white_knight.move(2, 2, @board)).to be true
+			expect(white_knight.locate_self(@board)).to eq([2, 2])
+		end		
 	end
 end
 
@@ -200,6 +243,37 @@ describe King do
 			@board.placements[3][4] = white_king
 			@board.placements[4][0] = Blank.new
 			expect(white_king.valid_moves(@board)).to eq([[4,4],[4,3],[3,3],[2,3],[2,4]])
+		end
+	end
+
+	describe '#move' do
+		before :each do
+			@board = Board.new
+			@board.set_starting_positions
+			@white_king = @board.placements[4][0]
+			@white_rook = @board.placements[0][0]
+			@board.placements[1][0] = Blank.new
+			@board.placements[2][0] = Blank.new
+			@board.placements[3][0] = Blank.new
+		end
+
+		it 'can castle to the left' do
+			@white_king.move(2, 0, @board)
+			expect(@white_king.locate_self(@board)).to eq([2, 0])
+			expect(@white_rook.locate_self(@board)).to eq([3, 0])
+		end		
+
+		it 'can not castle once the rook has moved' do
+			@white_rook.move(1, 0, @board)
+			expect(@white_king.move(2, 0, @board)).to be false
+			expect(@white_king.locate_self(@board)).to eq([4, 0])
+			expect(@white_rook.locate_self(@board)).to eq([1, 0])
+		end
+
+		it 'can not castle if the intervening square is threatened' do
+			@board.placements[3][1] = Rook.new(:black)
+			expect(@white_king.move(2, 0, @board)).to be false
+			expect(@white_king.locate_self(@board)).to eq([4, 0])
 		end
 	end
 end

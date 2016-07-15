@@ -2,8 +2,6 @@
 # Implement en passent - I think there needs to be a turn counter for
 #    this since you can only capture a pawn that moved on the prev turn, so
 #    will return to this after implementing the game loop
-# Implement Castling - need to add "has_moved?" booleans for the rooks
-# and King to make sure that it's allowed => need to write move methods first
 
 module Locate
 	def locate_self(board)
@@ -64,16 +62,16 @@ module Locate
 	end
 
 	def move(x, y, board)
+		# This also works for capturing enemy pieces
 	 	if self.valid_moves(board).include?([x, y])
 	 		current_x, current_y = self.locate_self(board)
-	 		if !board.placements[x][y].is_blank
-	 			# capture piece at x, y
-	 		else
-	 			board.placements[x][y] = self
-	 			board.placements[current_x][current_y] = Blank.new
-	 		end
+ 			board.placements[x][y] = self
+ 			board.placements[current_x][current_y] = Blank.new
+ 			self.has_moved = true
+ 			return true
+	 	else
+	 		return false
 	 	end
-
 	end
 end
 
@@ -156,14 +154,37 @@ class Board
 		end
 		attacked.uniq
 	end
+
+	def find_king(team)
+		(0..7).each do |i|
+			(0..7).each do |j|
+				if @placements[i][j].class == King && @placements[i][j].team == team
+					return [i, j]
+				end
+			end
+		end
+	end
+
+	def in_check(team)
+		kx, ky = find_king(team)
+		attacking_team(team).include?([kx, ky])
+	end
+
+	def in_checkmate(team)
+		kx, ky = find_king(team)
+		king = placements[kx][ky]
+		kings_moves = king.valid_moves(self)
+		kings_moves.size == 0 && in_check(team)
+	end
 end
 
 class King
 	include Locate
-	attr_accessor :team, :symbol
+	attr_accessor :team, :symbol, :has_moved
 
 	def initialize(team)
 		@team = team
+		@has_moved = false
 		if team == :white
 			@symbol = "K"
 		else
@@ -175,21 +196,18 @@ class King
 		false
 	end
 
-	def find_enemy_king(board)
-		(0..7).each do |i|
-			(0..7).each do |j|
-				if board.placements[i][j].class == King && board.placements[i][j].team != @team
-					return [i, j]
-				end
-			end
-		end
-	end
-
 	def valid_moves(board)
+		@board = board
 		i,j = locate_self(board)
-		ex,ey = find_enemy_king(board)
+		enemy_team = case @team
+		when :white
+			:black
+		when :black
+			:white
+		end
+		ex,ey = @board.find_king(enemy_team)
 		moves = []
-		attacked = board.attacking_team(@team)
+		attacked = @board.attacking_team(@team)
 
 		def attacked_by_enemy_king?(x, y, enemy_x, enemy_y)
 			if (enemy_x - x).abs <= 1 && (enemy_y - y).abs <= 1
@@ -199,12 +217,12 @@ class King
 			end
 		end
 
-		def check_direction(x, y, dir, board, attacked, enemy_king_x, enemy_king_y)
+		def check_direction(x, y, dir, attacked, enemy_king_x, enemy_king_y)
 			move = []
 			next_x, next_y = next_square(x, y, dir)
 
 			if on_board(next_x, next_y) && !attacked.include?([next_x,next_y]) && !attacked_by_enemy_king?(next_x,next_y,enemy_king_x,enemy_king_y)
-				if board.placements[next_x][next_y].is_blank || board.placements[next_x][next_y].team != @team
+				if @board.placements[next_x][next_y].is_blank || @board.placements[next_x][next_y].team != @team
 					move << [next_x, next_y]
 				end
 			end
@@ -212,14 +230,40 @@ class King
 			move
 		end
 
-		moves += check_direction(i, j, "up", board, attacked, ex, ey)
-		moves += check_direction(i, j, "ne", board, attacked, ex, ey)
-		moves += check_direction(i, j, "right", board, attacked, ex, ey)
-		moves += check_direction(i, j, "se", board, attacked, ex, ey)
-		moves += check_direction(i, j, "down", board, attacked, ex, ey)
-		moves += check_direction(i, j, "sw", board, attacked, ex, ey)
-		moves += check_direction(i, j, "left", board, attacked, ex, ey)
-		moves += check_direction(i, j, "nw", board, attacked, ex, ey)
+		def check_attacked(squares)
+			if @board.attacking_team(@team).any? {|sq| squares.include?(sq)}
+				true
+			else
+				false
+			end
+		end
+
+
+		moves += check_direction(i, j, "up", attacked, ex, ey)
+		moves += check_direction(i, j, "ne", attacked, ex, ey)
+		moves += check_direction(i, j, "right", attacked, ex, ey)
+		moves += check_direction(i, j, "se", attacked, ex, ey)
+		moves += check_direction(i, j, "down", attacked, ex, ey)
+		moves += check_direction(i, j, "sw", attacked, ex, ey)
+		moves += check_direction(i, j, "left", attacked, ex, ey)
+		moves += check_direction(i, j, "nw", attacked, ex, ey)
+
+		# castling
+		if !@has_moved && @board.placements[0][0].class == Rook && !@board.placements[0][0].has_moved 
+			if @board.placements[1][0].is_blank && @board.placements[2][0].is_blank && @board.placements[3][0].is_blank 	
+				if !check_attacked([[2, 0], [3, 0], [4, 0]])			
+					moves << [2, 0]
+				end
+			end
+		end
+
+		if !@has_moved && @board.placements[0][7].class == Rook && !@board.placements[0][7].has_moved 
+			if @board.placements[5][0].is_blank && @board.placements[6][0].is_blank	
+				if !check_attacked([[4, 0], [5, 0], [6, 0]])
+					moves << [6, 0]
+				end
+			end
+		end		
 
 		moves
 	end
@@ -227,14 +271,42 @@ class King
 	def attacking(board)
 		valid_moves(board)
 	end
+
+	def move(x, y, board)
+		# Special extra logic for castling
+	 	if self.valid_moves(board).include?([x, y])
+	 		current_x, current_y = self.locate_self(board)
+	 		if (current_x - x).abs == 2
+	 			# must be castling
+	 			if x == 2
+	 				left_rook = board.placements[0][0]
+	 				board.placements[3][0] = left_rook
+	 				board.placements[0][0] = Blank.new
+	 				left_rook.has_moved = true
+	 			elsif x == 6
+	 				right_rook = board.placements[7][0]
+	 				board.placements[5][0] = right_rook
+	 				board.placements[7][0] = Blank.new
+	 				right_rook.has_moved = true
+	 			end
+	 		end
+ 			board.placements[x][y] = self
+ 			board.placements[current_x][current_y] = Blank.new
+ 			self.has_moved = true
+ 			return true
+	 	else
+	 		return false
+	 	end
+	end
 end
 
 class Queen
 	include Locate
-	attr_accessor :team, :symbol
+	attr_accessor :team, :symbol, :has_moved
 
 	def initialize(team)
 		@team = team
+		@has_moved = false
 		if team == :white
 			@symbol = "Q"
 		else
@@ -269,10 +341,11 @@ end
 
 class Bishop
 	include Locate
-	attr_accessor :team, :symbol
+	attr_accessor :team, :symbol, :has_moved
 
 	def initialize(team)
 		@team = team
+		@has_moved = false
 		if team == :white
 			@symbol = "B"
 		else
@@ -303,10 +376,11 @@ end
 
 class Knight
 	include Locate
-	attr_accessor :team, :symbol
+	attr_accessor :team, :symbol, :has_moved
 
 	def initialize(team)
 		@team = team
+		@has_moved = false
 		if team == :white
 			@symbol = "N"
 		else
@@ -341,10 +415,11 @@ end
 
 class Rook
 	include Locate
-	attr_accessor :team, :symbol
+	attr_accessor :team, :symbol, :has_moved
 
 	def initialize(team)
 		@team = team
+		@has_moved = false
 		if team == :white
 			@symbol = "R"
 		else
@@ -375,10 +450,11 @@ end
 
 class Pawn
 	include Locate
-	attr_accessor :team, :symbol, :has_moved
+	attr_accessor :team, :symbol, :has_moved, :has_moved
 
 	def initialize(team)
 		@team = team
+		@has_moved = false
 		if team == :white
 			@symbol = "P"
 		else
