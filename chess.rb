@@ -1,5 +1,9 @@
 # TODO
-# Implement en passent, castling
+# Implement en passent - I think there needs to be a turn counter for
+#    this since you can only capture a pawn that moved on the prev turn, so
+#    will return to this after implementing the game loop
+# Implement Castling - need to add "has_moved?" booleans for the rooks
+# and King to make sure that it's allowed => need to write move methods first
 
 module Locate
 	def locate_self(board)
@@ -57,6 +61,19 @@ module Locate
 			x,y = next_x, next_y
 		end
 		moves
+	end
+
+	def move(x, y, board)
+	 	if self.valid_moves(board).include?([x, y])
+	 		current_x, current_y = self.locate_self(board)
+	 		if !board.placements[x][y].is_blank
+	 			# capture piece at x, y
+	 		else
+	 			board.placements[x][y] = self
+	 			board.placements[current_x][current_y] = Blank.new
+	 		end
+	 	end
+
 	end
 end
 

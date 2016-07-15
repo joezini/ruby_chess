@@ -88,6 +88,19 @@ describe Pawn do
 			expect(white_pawn.valid_moves(@board)).to eq([[3,3],[4,3]])
 		end
 	end
+
+	describe '#move' do
+		before :each do
+			@board = Board.new
+			@board.set_starting_positions
+		end
+
+		it 'can move 2 squares from start' do
+			white_pawn = @board.placements[3][1]
+			white_pawn.move(3,3,@board)
+			expect(white_pawn.locate_self(@board)).to eq([3,3])
+		end
+	end
 end
 
 describe Rook do
