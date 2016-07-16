@@ -47,6 +47,18 @@ describe Board do
 			board.placements[5][2] = Pawn.new(:black)
 			expect(board.in_checkmate(:white)).to be true
 		end
+
+		it 'reports only check if King only attacked by one threatened piece' do
+			board = Board.new
+			board.set_starting_positions
+			board.placements[3][7] = Blank.new
+			board.placements[5][5] = Knight.new(:white)
+			board.placements[2][6] = Pawn.new(:white)
+			board.placements[2][6].has_moved = true
+			expect(board.in_check(:black)).to be true
+			expect(board.in_checkmate(:black)).to be false
+		end
+
 	end
 end
 
@@ -109,6 +121,17 @@ describe Pawn do
 			white_pawn = @board.placements[3][1]
 			white_pawn.move(3,3,@board)
 			expect(white_pawn.locate_self(@board)).to eq([3,3])
+		end
+
+		it 'can capture en passant' do
+			black_pawn = @board.placements[3][6]
+			@board.placements[3][3] = black_pawn
+			@board.placements[3][6] = Blank.new
+			white_pawn = @board.placements[4][1]
+			white_pawn.move(4, 3, @board)
+			@board.turn += 1
+			expect(black_pawn.move(4, 2, @board)).to be true
+			expect(@board.placements[4][3].is_blank).to be true
 		end
 	end
 end

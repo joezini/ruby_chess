@@ -1,7 +1,6 @@
 # TODO
-# Implement en passent - I think there needs to be a turn counter for
-#    this since you can only capture a pawn that moved on the prev turn, so
-#    will return to this after implementing the game loop
+# B) Prevent a King ending the turn in check if it started in check
+# E) Add save functionality
 
 module Locate
 	def locate_self(board)
@@ -68,18 +67,38 @@ module Locate
  			board.placements[x][y] = self
  			board.placements[current_x][current_y] = Blank.new
  			self.has_moved = true
+ 			self.last_move_turn = board.turn
  			return true
 	 	else
 	 		return false
 	 	end
 	end
+
+	def under_attack?(board)
+		x, y = locate_self(board)
+		attacked_squares = board.attacking_team(self.team)
+		attacked_squares.include?([x, y])
+	end
+
+	def defended?(board)
+		x, y = locate_self(board)
+		other_team = case self.team
+		when :white
+			:black
+		else
+			:white
+		end
+		defended_squares = board.attacking_team(other_team)
+		defended_squares.include?([x, y])
+	end
 end
 
 class Board
-	attr_accessor :placements
+	attr_accessor :placements, :turn
 
 	def initialize
 		@placements = Array.new(8) {Array.new(8, nil)}
+		@turn = 1
 	end
 
 	def as_string
@@ -155,6 +174,21 @@ class Board
 		attacked.uniq
 	end
 
+	def attacking_king(team)
+		kx, ky = find_king(team)
+		attackers = []
+		@placements.each do |col|
+			col.each do |square|
+				if !square.is_blank && square.team != team && square.class != King
+					if square.valid_moves(self).include?([kx, ky])
+						attackers << square
+					end
+				end
+			end
+		end
+		attackers
+	end
+
 	def find_king(team)
 		(0..7).each do |i|
 			(0..7).each do |j|
@@ -174,17 +208,29 @@ class Board
 		kx, ky = find_king(team)
 		king = placements[kx][ky]
 		kings_moves = king.valid_moves(self)
-		kings_moves.size == 0 && in_check(team)
+		if kings_moves.size == 0
+			attackers = attacking_king(team)
+			safe_attackers = attackers.select {|a| !a.under_attack?(self) || a.defended?(self)}
+			number_of_safe_attackers = safe_attackers.size
+			number_of_unsafe_attackers = attackers.size - number_of_safe_attackers
+
+			if number_of_safe_attackers >= 1 || number_of_unsafe_attackers >= 2
+				return true
+			else
+				return false
+			end
+		end
 	end
 end
 
 class King
 	include Locate
-	attr_accessor :team, :symbol, :has_moved
+	attr_accessor :team, :symbol, :has_moved, :last_move_turn
 
 	def initialize(team)
 		@team = team
 		@has_moved = false
+		@last_move_turn = 0
 		if team == :white
 			@symbol = "K"
 		else
@@ -283,16 +329,19 @@ class King
 	 				board.placements[3][0] = left_rook
 	 				board.placements[0][0] = Blank.new
 	 				left_rook.has_moved = true
+	 				left_rook.last_move_turn = board.turn
 	 			elsif x == 6
 	 				right_rook = board.placements[7][0]
 	 				board.placements[5][0] = right_rook
 	 				board.placements[7][0] = Blank.new
 	 				right_rook.has_moved = true
+	 				right_rook.last_move_turn = board.turn
 	 			end
 	 		end
  			board.placements[x][y] = self
  			board.placements[current_x][current_y] = Blank.new
  			self.has_moved = true
+ 			self.last_move_turn = board.turn
  			return true
 	 	else
 	 		return false
@@ -302,11 +351,12 @@ end
 
 class Queen
 	include Locate
-	attr_accessor :team, :symbol, :has_moved
+	attr_accessor :team, :symbol, :has_moved, :last_move_turn
 
 	def initialize(team)
 		@team = team
 		@has_moved = false
+		@last_move_turn = 0
 		if team == :white
 			@symbol = "Q"
 		else
@@ -341,11 +391,12 @@ end
 
 class Bishop
 	include Locate
-	attr_accessor :team, :symbol, :has_moved
+	attr_accessor :team, :symbol, :has_moved, :last_move_turn
 
 	def initialize(team)
 		@team = team
 		@has_moved = false
+		@last_move_turn = 0
 		if team == :white
 			@symbol = "B"
 		else
@@ -376,11 +427,12 @@ end
 
 class Knight
 	include Locate
-	attr_accessor :team, :symbol, :has_moved
+	attr_accessor :team, :symbol, :has_moved, :last_move_turn
 
 	def initialize(team)
 		@team = team
 		@has_moved = false
+		@last_move_turn = 0
 		if team == :white
 			@symbol = "N"
 		else
@@ -415,11 +467,12 @@ end
 
 class Rook
 	include Locate
-	attr_accessor :team, :symbol, :has_moved
+	attr_accessor :team, :symbol, :has_moved, :last_move_turn
 
 	def initialize(team)
 		@team = team
 		@has_moved = false
+		@last_move_turn = 0
 		if team == :white
 			@symbol = "R"
 		else
@@ -450,11 +503,12 @@ end
 
 class Pawn
 	include Locate
-	attr_accessor :team, :symbol, :has_moved, :has_moved
+	attr_accessor :team, :symbol, :has_moved, :has_moved, :last_move_turn
 
 	def initialize(team)
 		@team = team
 		@has_moved = false
+		@last_move_turn = 0
 		if team == :white
 			@symbol = "P"
 		else
@@ -496,14 +550,20 @@ class Pawn
 		if !@has_moved && board.placements[i][next_row(j,2)].is_blank && !blocked
 			moves << [i, next_row(j,2)]
 		end
+		# Can move diagonally if there's a piece to capture
+		# or an opponent pawn just moved 2 squares (en passant)
 		if on_board(next_row(j,1))
 			if on_board(i - 1)
-				if !board.placements[i - 1][next_row(j,1)].is_blank && board.placements[i - 1][next_row(j,1)].team != @team
+				diagonal_capture = !board.placements[i - 1][next_row(j,1)].is_blank && board.placements[i - 1][next_row(j,1)].team != @team
+				en_passant = !board.placements[i - 1][j].is_blank && board.placements[i - 1][j].team != @team && board.placements[i - 1][j].class == Pawn && board.placements[i - 1][j].last_move_turn == board.turn - 1
+				if diagonal_capture || en_passant
 					moves << [i - 1, next_row(j,1)]
 				end
 			end
 			if on_board(i + 1)
-				if !board.placements[i + 1][next_row(j,1)].is_blank && board.placements[i + 1][next_row(j,1)].team != @team
+				diagonal_capture = !board.placements[i + 1][next_row(j,1)].is_blank && board.placements[i + 1][next_row(j,1)].team != @team
+				en_passant = !board.placements[i + 1][j].is_blank && board.placements[i + 1][j].team != @team && board.placements[i + 1][j].class == Pawn && board.placements[i + 1][j].last_move_turn == board.turn - 1
+				if diagonal_capture || en_passant
 					moves << [i + 1, next_row(j,1)]
 				end
 			end
@@ -528,6 +588,24 @@ class Pawn
 
 		attacking
 	end
+
+	def move(x, y, board)
+		# This also works for capturing enemy pieces
+	 	if self.valid_moves(board).include?([x, y])
+	 		current_x, current_y = self.locate_self(board)
+	 		# en-passant
+	 		if board.placements[x][y].is_blank && x != current_x
+	 			board.placements[x][current_y] = Blank.new
+	 		end
+ 			board.placements[x][y] = self
+ 			board.placements[current_x][current_y] = Blank.new
+ 			self.has_moved = true
+ 			self.last_move_turn = board.turn
+ 			return true
+	 	else
+	 		return false
+	 	end
+	end
 end
 
 class Blank
@@ -543,9 +621,12 @@ class Blank
 end
 
 class Game
+	attr_accessor :game_over
+
 	def initialize
 		@board = Board.new
 		@board.set_starting_positions
+		@game_over = false
 	end
 
 	def play
@@ -582,24 +663,89 @@ class Game
 			valid = false
 			piece = ""
 			until valid do
-				puts "It's #{player}'s turn, please enter a piece to move (e.g. d4):"
+				puts "It's #{player}'s turn, please enter a piece to move (e.g. d4)"
+				puts "or enter 'q' to quit"
 				piece = gets.chomp
 				if validate_square(piece) && validate_piece(piece, player)
 					valid = true
+					return validate_piece(piece, player)
+				elsif piece == "q"
+					puts "Quit: are you sure? (y/n)"
+					confirm = gets.chomp
+					if confirm == "y"
+						@game_over = true
+						valid = true
+					end
 				end
 			end
-			validate_piece(piece, player)
 		end
 
+		def get_dest_and_move(piece)
+			valid = false
+			until valid do 
+				puts "#{piece.class} - enter destination square"
+				puts "or type 'x' to select a different piece:"
+				dest = gets.chomp
+				if validate_square(dest)
+					dx = @letters.find_index(dest[0])
+					dy = @numbers.find_index(dest[1])
+					if piece.move(dx, dy, @board)
+						# Check if there's a pawn to promote
+						if piece.class == Pawn && (dy == 0 || dy == 7)
+							promoted = false
+							until promoted do
+								puts "Congrats! What do you want to promote the pawn to? (q/b/n/r)"
+								new_rank = gets.chomp
+								case new_rank
+								when "q"
+									@board.placements[dx][dy] = Queen.new(piece.team)
+									promoted = true
+								when "b"
+									@board.placements[dx][dy] = Bishop.new(piece.team)
+									promoted = true
+								when "n"
+									@board.placements[dx][dy] = Knight.new(piece.team)
+									promoted = true
+								when "r"
+									@board.placements[dx][dy] = Rook.new(piece.team)
+									promoted = true
+								end
+							end
+						end
+						valid = true
+					end
+				else
+					if dest == 'x'
+						x, y = get_valid_piece(piece.team)
+						piece = @board.placements[x][y]
+					end
+				end
+			end
+		end
 
 		puts "Welcome to my chess game!"
 		puts @board.as_string
-		game_over = false
 		player = :white
-		until game_over do
+		opponent = :black
+		until @game_over do
 			x, y = get_valid_piece(player)
-			puts "#{x}, #{y}"
-			game_over = true
+			if !@game_over
+				piece = @board.placements[x][y]
+				get_dest_and_move(piece)
+				puts @board.as_string
+				if @board.in_checkmate(opponent)
+					puts "Checkmate! #{player} wins!"
+					@game_over = true
+				elsif @board.in_check(opponent)
+					puts "Check!"
+				end
+				if player == :white
+					player, opponent = :black, :white
+				else
+					player, opponent = :white, :black
+				end
+				@board.turn += 1
+			end
 		end
 	end
 end
