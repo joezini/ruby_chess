@@ -1,6 +1,4 @@
-# TODO
-# B) Prevent a King ending the turn in check if it started in check
-# E) Add save functionality
+require 'yaml'
 
 module Locate
 	def locate_self(board)
@@ -627,6 +625,7 @@ class Game
 		@board = Board.new
 		@board.set_starting_positions
 		@game_over = false
+		@save_folder = "saves"
 	end
 
 	def play
@@ -659,28 +658,97 @@ class Game
 			end
 		end
 
-		def get_valid_piece(player)
+		def save_game
+			save_data = YAML::dump(@board)
+			Dir.mkdir(@save_folder) unless File.directory?(@save_folder)
+			timestamp = Time.now.strftime("%d-%m-%Y_%H-%M-%S")
+			save_file = File.new(@save_folder + "/" + timestamp, "w")
+			save_file.puts save_data
+			save_file.close
+			puts "Game saved as " + timestamp
+		end
+
+		def open_game
+			files = Dir.glob(@save_folder + "/*")
+			files.each_with_index do |f, i|
+				puts "#{i+1}: #{f}"
+			end
+			valid_file = false
+			until valid_file
+				puts "Please select a save file:"
+				selection = gets.chomp
+				if selection.to_i > 0 && selection.to_i <= files.size
+					valid_file = true
+				end
+			end
+			open_file = files[selection.to_i - 1]
+			save_data_raw = ''
+			File.open(open_file).each do |line|
+				save_data_raw << line
+			end
+			save_data = YAML::load(save_data_raw) 
+			puts save_data
+			@board = save_data
+			puts "File #{open_file} opened!"
+			puts @board.as_string
+		end
+
+		def quit_game
+			puts "Quit: are you sure? (y/n)"
+			confirm = gets.chomp
+			if confirm == "y"
+				return true
+			else
+				return false
+			end
+		end
+
+		def choose_action(player)
 			valid = false
 			piece = ""
 			until valid do
 				puts "It's #{player}'s turn, please enter a piece to move (e.g. d4)"
-				puts "or enter 'q' to quit"
+				puts "or enter 'q' to quit, 's' to save or 'o' to open"
 				piece = gets.chomp
 				if validate_square(piece) && validate_piece(piece, player)
 					valid = true
 					return validate_piece(piece, player)
 				elsif piece == "q"
-					puts "Quit: are you sure? (y/n)"
-					confirm = gets.chomp
-					if confirm == "y"
-						@game_over = true
+					if quit_game
 						valid = true
+						@game_over = true
 					end
+				elsif piece == "s"
+					save_game
+				elsif piece == "o"
+					open_game
 				end
 			end
 		end
 
-		def get_dest_and_move(piece)
+		def promote(piece, x, y)
+			promoted = false
+			until promoted do
+				puts "Congrats! What do you want to promote the pawn to? (q/b/n/r)"
+				new_rank = gets.chomp
+				case new_rank
+				when "q"
+					@board.placements[dx][dy] = Queen.new(piece.team)
+					promoted = true
+				when "b"
+					@board.placements[dx][dy] = Bishop.new(piece.team)
+					promoted = true
+				when "n"
+					@board.placements[dx][dy] = Knight.new(piece.team)
+					promoted = true
+				when "r"
+					@board.placements[dx][dy] = Rook.new(piece.team)
+					promoted = true
+				end
+			end
+		end
+
+		def make_move(piece)
 			valid = false
 			until valid do 
 				puts "#{piece.class} - enter destination square"
@@ -692,31 +760,13 @@ class Game
 					if piece.move(dx, dy, @board)
 						# Check if there's a pawn to promote
 						if piece.class == Pawn && (dy == 0 || dy == 7)
-							promoted = false
-							until promoted do
-								puts "Congrats! What do you want to promote the pawn to? (q/b/n/r)"
-								new_rank = gets.chomp
-								case new_rank
-								when "q"
-									@board.placements[dx][dy] = Queen.new(piece.team)
-									promoted = true
-								when "b"
-									@board.placements[dx][dy] = Bishop.new(piece.team)
-									promoted = true
-								when "n"
-									@board.placements[dx][dy] = Knight.new(piece.team)
-									promoted = true
-								when "r"
-									@board.placements[dx][dy] = Rook.new(piece.team)
-									promoted = true
-								end
-							end
+							promote(piece, dx, dy)
 						end
 						valid = true
 					end
 				else
 					if dest == 'x'
-						x, y = get_valid_piece(piece.team)
+						x, y = choose_action(piece.team)
 						piece = @board.placements[x][y]
 					end
 				end
@@ -728,10 +778,10 @@ class Game
 		player = :white
 		opponent = :black
 		until @game_over do
-			x, y = get_valid_piece(player)
+			x, y = choose_action(player)
 			if !@game_over
 				piece = @board.placements[x][y]
-				get_dest_and_move(piece)
+				make_move(piece)
 				puts @board.as_string
 				if @board.in_checkmate(opponent)
 					puts "Checkmate! #{player} wins!"
